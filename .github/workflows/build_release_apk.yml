@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -77,3 +77,21 @@ jobs:
           path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 30
+
+      - name: Create GitHub Release with APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: apk-${{ github.run_number }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          apks=(app/build/outputs/apk/release/*.apk)
+          if [ "${#apks[@]}" -eq 0 ]; then
+            echo '::error::No release APK to publish'
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" "${apks[@]}" \
+            --target "$GITHUB_SHA" \
+            --title "Morphe Manager APK $RELEASE_TAG" \
+            --notes "Signed release APK from commit $GITHUB_SHA (workflow run $GITHUB_RUN_ID)."
