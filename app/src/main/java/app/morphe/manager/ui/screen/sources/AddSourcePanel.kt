@@ -14,6 +14,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -83,6 +85,7 @@ fun AddSourcePanel(
         // each time it opens
         var options by rememberSaveable { mutableStateOf(NewSourceOptions()) }
         val remote = rememberRemoteLinksState(onCheckUrl)
+        var tab by rememberSaveable { mutableIntStateOf(0) }
         val readyCount = remote.readyLinks.size + files.count { it.adds }
 
         Column(modifier = Modifier.padding(bottom = Defaults.SpaceSmall)) {
@@ -101,47 +104,54 @@ fun AddSourcePanel(
                     style = TitleActionStyle.Neutral
                 )
             }
-            // Scrolled between the header and the actions once the keyboard leaves too little room
-            // for it all, so adding stays in reach however many sources are pending
-            val scrollState = rememberScrollState()
-            Column(
-                modifier = Modifier
-                    .weight(1f, fill = false)
-                    .verticalScrollFade(scrollState)
-                    .verticalScroll(scrollState)
-                    .padding(horizontal = Defaults.SpaceLarge)
-                    .padding(bottom = Defaults.SpaceMedium),
-                verticalArrangement = Arrangement.spacedBy(Defaults.SpaceMedium)
-            ) {
-                PendingSources(state = remote, files = files, onRemoveFile = onRemoveFile)
-                // The two ways a source comes in, kept together apart from what is asked of it
-                Column(verticalArrangement = Arrangement.spacedBy(Defaults.SpaceSmall)) {
-                    LinkField(state = remote, showHint = remote.entries.isEmpty() && files.isEmpty())
-                    // Files join the same list as links, picked from storage rather than typed
-                    AppDialogOutlinedButton(
-                        text = stringResource(R.string.sources_dialog_local_files),
-                        onClick = onPickFiles,
-                        icon = MaterialSymbols.Rounded.Upload_file,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+            TabRow(selectedTabIndex = tab) {
+                listOf("Catalog", "Custom URL", "Local file").forEachIndexed { index, label ->
+                    Tab(selected = tab == index, onClick = { tab = index }, text = { Text(label) })
                 }
-                NewSourceOptionsGroup(
-                    options = options,
-                    onOptionsChange = { options = it },
-                    offersChooseApps = true,
-                    offersPrerelease = remote.offersPrerelease
-                )
             }
-            Box(modifier = Modifier.padding(horizontal = Defaults.SpaceLarge)) {
-                AppDialogButtonRow(
-                    primaryText = if (readyCount > 1) {
-                        pluralStringResource(R.plurals.sources_dialog_add_count, readyCount, readyCount.toString())
-                    } else {
-                        stringResource(R.string.add)
+            when (tab) {
+                0 -> SourceCatalogPanel(
+                    onCheckUrl = onCheckUrl,
+                    onAdd = { url ->
+                        onSubmit(listOf(url), NewSourceOptions())
+                        onClose()
                     },
-                    onPrimaryClick = { onSubmit(remote.readyLinks, options) },
-                    primaryEnabled = readyCount > 0
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = Defaults.SpaceLarge)
                 )
+                else -> {
+                    val scrollState = rememberScrollState()
+                    Column(
+                        modifier = Modifier.weight(1f, fill = false)
+                            .verticalScrollFade(scrollState).verticalScroll(scrollState)
+                            .padding(horizontal = Defaults.SpaceLarge)
+                            .padding(bottom = Defaults.SpaceMedium),
+                        verticalArrangement = Arrangement.spacedBy(Defaults.SpaceMedium)
+                    ) {
+                        PendingSources(state = remote, files = files, onRemoveFile = onRemoveFile)
+                        if (tab == 1) LinkField(state = remote, showHint = remote.entries.isEmpty())
+                        else AppDialogOutlinedButton(
+                            text = stringResource(R.string.sources_dialog_local_files),
+                            onClick = onPickFiles,
+                            icon = MaterialSymbols.Rounded.Upload_file,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        NewSourceOptionsGroup(
+                            options = options,
+                            onOptionsChange = { options = it },
+                            offersChooseApps = true,
+                            offersPrerelease = remote.offersPrerelease
+                        )
+                    }
+                    Box(modifier = Modifier.padding(horizontal = Defaults.SpaceLarge)) {
+                        AppDialogButtonRow(
+                            primaryText = if (readyCount > 1) {
+                                pluralStringResource(R.plurals.sources_dialog_add_count, readyCount, readyCount.toString())
+                            } else stringResource(R.string.add),
+                            onPrimaryClick = { onSubmit(remote.readyLinks, options) },
+                            primaryEnabled = readyCount > 0
+                        )
+                    }
+                }
             }
         }
     }
