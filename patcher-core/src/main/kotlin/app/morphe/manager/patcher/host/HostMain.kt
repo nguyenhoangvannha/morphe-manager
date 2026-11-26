@@ -44,7 +44,7 @@ import kotlin.time.TimeSource
  */
 fun main(args: Array<String>) {
     // Patches tell Android from a desktop host by java.vendor, which ART sets to this and the
-    // embedded OpenJDK build leaves as N/A
+    // embedded JVM, a build for Linux, to its own vendor
     System.setProperty("java.vendor", "The Android Project")
     val (commandsFile, eventsFile) = args
     val collectors = ManagementFactory.getGarbageCollectorMXBeans().toTypedArray()
@@ -82,6 +82,7 @@ fun serveRun(
 ): Nothing {
     val code = try {
         HostEvents(FileOutputStream(eventsFile)).use { events ->
+            events.send(HostEvent.Started)
             // Patches print what they did, which on Android goes to /dev/null or at best logcat.
             // The log is the one place the user sees it
             System.setOut(events.printer())
@@ -118,6 +119,11 @@ private fun run(
     events: HostEvents
 ) {
     events.logger.info(vmDescription())
+    // The character set the VM names files in, which leaves a path with any other character unreadable
+    val fileNames = System.getProperty(FILE_NAME_ENCODING)
+    if (fileNames != null && !fileNames.equals(Charsets.UTF_8.name(), ignoreCase = true)) {
+        events.logger.warn("File names are read as $fileNames, files with other characters in their path cannot be opened")
+    }
     events.watchForStalls()
     gcClock?.let(events::watchForGcOverhead)
 
@@ -138,8 +144,12 @@ private fun run(
 private fun vmDescription(): String {
     fun property(name: String) = System.getProperty(name) ?: "?"
     return "Host VM: ${property("java.vm.name")} ${property("java.vm.version")} (${property("java.vm.info")}) " +
-            "arch=${property("os.arch")} cores=${Runtime.getRuntime().availableProcessors()}"
+            "arch=${property("os.arch")} cores=${Runtime.getRuntime().availableProcessors()} " +
+            "filenames=${property(FILE_NAME_ENCODING)}"
 }
+
+/** The system property of the character set the VM names files in. */
+private const val FILE_NAME_ENCODING = "sun.jnu.encoding"
 
 private fun loadLogged(file: File, loadPatches: (File) -> Collection<Patch>, logger: Logger): Collection<Patch> {
     val started = TimeSource.Monotonic.markNow()
