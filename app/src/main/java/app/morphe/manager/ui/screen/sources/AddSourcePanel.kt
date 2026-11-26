@@ -67,6 +67,7 @@ fun AddSourcePanel(
     visible: Boolean,
     onClose: () -> Unit,
     onSubmit: (urls: List<String>, options: NewSourceOptions) -> Unit,
+    onAddCatalogSource: (String) -> Unit = { url -> onSubmit(listOf(url), NewSourceOptions()) },
     onPickFiles: () -> Unit,
     onRemoveFile: (Uri) -> Unit,
     localFiles: List<PickedBundle>,
@@ -115,10 +116,7 @@ fun AddSourcePanel(
             when (tab) {
                 0 -> SourceCatalogPanel(
                     onCheckUrl = onCheckUrl,
-                    onAdd = { url ->
-                        onSubmit(listOf(url), NewSourceOptions())
-                        onClose()
-                    },
+                    onAdd = onAddCatalogSource,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = Defaults.SpaceLarge)
                 )
                 else -> {

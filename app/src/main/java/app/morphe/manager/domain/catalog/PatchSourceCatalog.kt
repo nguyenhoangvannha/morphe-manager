@@ -41,7 +41,12 @@ data class CatalogPatch(val name: String = "")
 @Serializable
 data class CatalogStoreApp(val name: String = "", val iconUrl: String? = null)
 
-data class CatalogAppGroup(val packageName: String?, val name: String, val bundles: List<CatalogBundle>)
+data class CatalogAppGroup(
+    val packageName: String?,
+    val name: String,
+    val bundles: List<CatalogBundle>,
+    val iconUrl: String? = null
+)
 
 /** In-memory cache is shared across panel openings, with a retry that bypasses the cache. */
 object PatchSourceCatalogRepository {
@@ -77,21 +82,49 @@ object PatchSourceCatalogRepository {
             else packages.forEach { grouped.getOrPut(it) { mutableListOf() }.add(bundle) }
         }
         val groups = grouped.map { (pkg, bundles) ->
-            CatalogAppGroup(pkg, pkg?.let { catalog.store[it]?.name }?.takeIf { it.isNotBlank() } ?: pkg.orEmpty(), bundles.distinctBy { it.source to it.repo })
+            val storeApp = pkg?.let { catalog.store[it] }
+            CatalogAppGroup(
+                packageName = pkg,
+                name = storeApp?.name?.takeIf { it.isNotBlank() } ?: pkg.orEmpty(),
+                bundles = bundles.distinctBy { it.source to it.repo },
+                iconUrl = storeApp?.iconUrl?.takeIf { it.isNotBlank() }
+            )
         }
         val words = query.trim().lowercase(Locale.ROOT).split(Regex("\\s+")).filter { it.isNotBlank() }
         fun CatalogAppGroup.matchesApp(word: String) = packageName != null &&
             (name.contains(word, true) || packageName.contains(word, true))
-        val appWords = words.filter { word -> groups.any { it.matchesApp(word) } }
+        fun matchesAuthor(word: String) = catalog.bundles.any { bundle ->
+            bundle.author?.contains(word, true) == true ||
+                bundle.repo.substringBefore('/').contains(word, true)
+        }
+        val appWords = words.filter { word -> !matchesAuthor(word) && groups.any { it.matchesApp(word) } }
         val sourceWords = words.filterNot { it in appWords }
+        val trimmed = query.trim().lowercase(Locale.ROOT)
         return groups.mapNotNull { group ->
             if (!appWords.all { group.matchesApp(it) }) return@mapNotNull null
             val bundles = group.bundles.filter { bundle ->
-                val searchable = listOfNotNull(bundle.name, bundle.author, bundle.repo,
+                val owner = bundle.repo.substringBefore('/')
+                val searchable = listOfNotNull(bundle.name, bundle.author, owner, bundle.repo,
                     bundle.repoDescription).plus(bundle.patches.map { it.name })
                     .plus(bundle.targetApps.flatMap { pkg -> listOfNotNull(pkg, catalog.store[pkg]?.name) })
                 sourceWords.all { word -> searchable.any { it.contains(word, true) } }
-            }.sortedWith(compareByDescending<CatalogBundle> { it.stars }.thenBy { it.repo })
+            }.sortedWith(
+                compareByDescending<CatalogBundle> { bundle ->
+                    var score = bundle.stars
+                    if (trimmed.isNotEmpty()) {
+                        val name = bundle.name.lowercase(Locale.ROOT)
+                        val repo = bundle.repo.lowercase(Locale.ROOT)
+                        val author = (bundle.author ?: "").lowercase(Locale.ROOT)
+                        val owner = repo.substringBefore('/')
+                        if (name == trimmed) score += 10000
+                        else if (name.startsWith(trimmed)) score += 5000
+                        else if (author == trimmed || owner == trimmed) score += 4000
+                        else if (author.startsWith(trimmed) || owner.startsWith(trimmed)) score += 3000
+                        else if (repo.contains(trimmed)) score += 2000
+                    }
+                    score
+                }.thenBy { it.repo }
+            )
             group.copy(bundles = bundles).takeIf { bundles.isNotEmpty() }
         }.sortedWith(compareBy<CatalogAppGroup> { it.packageName == null }
             .thenByDescending { it.bundles.size }.thenBy { it.name.lowercase(Locale.ROOT) }

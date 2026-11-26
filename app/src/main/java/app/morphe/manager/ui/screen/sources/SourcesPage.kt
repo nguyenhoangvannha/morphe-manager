@@ -5,6 +5,7 @@
 
 package app.morphe.manager.ui.screen.sources
 
+import app.morphe.manager.ui.model.NewSourceOptions
 import android.content.Intent
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
@@ -130,6 +131,10 @@ fun SourcesPage(
                 onSubmit = { urls, options ->
                     homeViewModel.addSources(urls, options)
                     state.closeAddSource()
+                    onSourceAdded()
+                },
+                onAddCatalogSource = { url ->
+                    homeViewModel.addSources(listOf(url), NewSourceOptions())
                     onSourceAdded()
                 },
                 onPickFiles = { openBundlePicker() },

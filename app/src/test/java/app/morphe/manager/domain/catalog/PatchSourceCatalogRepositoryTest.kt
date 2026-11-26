@@ -51,4 +51,21 @@ class PatchSourceCatalogRepositoryTest {
         assertEquals("https://github.com/owner/shared", shared.url)
         assertEquals("https://gitlab.com/group/repo", CatalogBundle(source = "gitlab", repo = "group/repo").url)
     }
+
+    @Test fun `author search matches across apps and preserves store iconUrl`() {
+        val withAuthor = PatchSourceCatalog(
+            bundles = listOf(
+                CatalogBundle(repo = "anddea/revanced-patches", name = "Anddea", author = "anddea", targetApps = listOf("com.google.android.youtube")),
+                CatalogBundle(repo = "other/patches", name = "Other", author = "someone", targetApps = listOf("com.anddea.app"))
+            ),
+            store = mapOf(
+                "com.google.android.youtube" to CatalogStoreApp("YouTube", iconUrl = "https://example.com/yt.png"),
+                "com.anddea.app" to CatalogStoreApp("Some App")
+            )
+        )
+        val groups = PatchSourceCatalogRepository.filterAppGroups(withAuthor, "anddea")
+        val youtubeGroup = groups.firstOrNull { it.packageName == "com.google.android.youtube" }
+        assertNotNull(youtubeGroup)
+        assertEquals("https://example.com/yt.png", youtubeGroup.iconUrl)
+    }
 }
